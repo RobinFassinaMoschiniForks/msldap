@@ -3,6 +3,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# msldap test suite: local lab profiles (may contain credentials) and reports
+tests/interop/**/profile.local.yml
+tests/interop/**/profile.*.local.yml
+/reports/
+.coverage
+.coverage.*
+coverage.xml
+
 # C extensions
 *.so
 

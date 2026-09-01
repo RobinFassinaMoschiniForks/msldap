@@ -1,0 +1,62 @@
+# Example live-target profile for the msldap interop suite.
+#
+# Copy this to `profile.local.yml` (git-ignored) and adjust for your lab, OR
+# point $MSLDAP_TEST_PROFILE at your own file. Credentials can be inlined here
+# for a DISPOSABLE lab, or supplied via the *_env environment variables so no
+# secret is written to disk.
+#
+# Run the live suite with:
+#   pytest tests/interop/live --run-live
+# Destructive (create/modify/delete) tests additionally need:
+#   allow_destructive: true   (below)  AND  the --run-destructive flag.
+
+target:
+  host: 192.168.56.11        # IP or hostname of the DC
+  protocol: ldap             # ldap | ldaps | gc | gc-ssl
+  port: null                 # null -> protocol default (389/636/3268/3269)
+  dc_ip: 192.168.56.11       # Kerberos KDC ip (defaults to host when null)
+
+# Base DN. Leave null to auto-detect from the RootDSE (recommended).
+tree: null
+
+authentication:
+  # Any msldap auth method: ntlm-password, ntlm-nt, kerberos-password,
+  # kerberos-rc4, kerberos-aes, simple, plain, anonymous, ...
+  method: ntlm-password
+
+  # NetBIOS or FQDN domain. Leave null for a local account / SASL negotiation.
+  domain: NORTH
+  domain_env: MSLDAP_TEST_DOMAIN
+
+  username: vagrant
+  username_env: MSLDAP_TEST_USERNAME
+
+  # Inline password is fine for a throwaway lab; prefer the env var otherwise.
+  password: vagrant
+  password_env: MSLDAP_TEST_PASSWORD
+
+# Extra msldap URL parameters (optional), e.g. encrypt/pagesize/etype.
+params: {}
+
+# Optional: other DCs in the same lab, reachable with the same account.
+# Tests that need the forest root (ADCS/Configuration partition), a second
+# forest (cross-forest trust/SID resolution) or a specific DC use these; they
+# skip cleanly when a target is absent. Each entry may override host, domain,
+# protocol, port, dc_ip, tree, method, username, password.
+#
+# extra_targets:
+#   root:                      # forest-root DC (ADCS lives in its Config NC)
+#     host: 192.168.56.10
+#     domain: SEVENKINGDOMS
+#     protocol: ldaps
+#   essos:                     # a second, trusted forest
+#     host: 192.168.56.12
+#     domain: ESSOS
+#     protocol: ldaps
+extra_targets: {}
+
+safety:
+  # Must be true for the suite to run at all against this target.
+  disposable: true
+  # Must be true (plus --run-destructive) for create/modify/delete tests.
+  allow_destructive: false

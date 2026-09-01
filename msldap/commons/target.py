@@ -97,7 +97,12 @@ class MSLDAPTarget(UniTarget):
 		
 		path = None
 		if url_e.path not in ['/', '', None]:
-			path = url_e.path
+			# The base DN is carried in the URL path (e.g. /dc=example,dc=org/).
+			# Strip the surrounding slashes so target.tree is a usable base DN
+			# rather than '/dc=example,dc=org/'.
+			path = url_e.path.strip('/')
+			if path == '':
+				path = None
 		
 		unitarget, extraparams = UniTarget.from_url(connection_url, protocol, port, msldaptarget_url_params)
 		pagesize = extraparams['pagesize'] if extraparams['pagesize'] is not None else 1000

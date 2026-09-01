@@ -1,3 +1,47 @@
 [build-system]
 requires = ["setuptools>=61.0.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+minversion = "7.4"
+testpaths = ["tests"]
+pythonpath = ["tests", "tests/interop/live"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+addopts = [
+    "-ra",
+    "--strict-config",
+    "--strict-markers",
+]
+markers = [
+    "unit: deterministic, offline unit tests (no network)",
+    "live: tests requiring a reachable, configured live LDAP/AD target (opt-in via --run-live)",
+    "destructive: tests that create/modify/delete directory objects (opt-in via --run-destructive)",
+    "slow: long-running tests (opt-in via --run-slow)",
+]
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+source = ["msldap"]
+omit = [
+    "msldap/examples/*",
+    "msldap/external/*",
+    "msldap/dontuse/*",
+    "tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 2
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "def __str__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

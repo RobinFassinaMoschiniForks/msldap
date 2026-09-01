@@ -1,0 +1,24 @@
+# Disposable OpenLDAP server for msldap non-AD interop tests.
+#
+#   docker compose -f tests/interop/openldap/docker-compose.yml up -d
+#   pytest tests/interop/openldap --run-live
+#   docker compose -f tests/interop/openldap/docker-compose.yml down -v
+#
+# Base DN:  dc=example,dc=org
+# Admin:    cn=admin,dc=example,dc=org  /  admin123
+# Ports:    3389 -> 389 (ldap), 3636 -> 636 (ldaps)
+services:
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: msldap-openldap
+    command: ["--copy-service"]
+    environment:
+      LDAP_ORGANISATION: "Example Inc"
+      LDAP_DOMAIN: "example.org"
+      LDAP_ADMIN_PASSWORD: "admin123"
+    ports:
+      - "3389:389"
+      - "3636:636"
+    volumes:
+      # osixia imports any *.ldif dropped here after the base domain is created.
+      - ./seed.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/99-seed.ldif:ro

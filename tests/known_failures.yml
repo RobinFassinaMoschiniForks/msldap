@@ -1,0 +1,82 @@
+# Registry of confirmed defects in msldap discovered by this test suite.
+#
+# Each entry is referenced from a test via `xfail(strict=True)` so that:
+#   * the default suite stays green (the bug is *expected* to fail), and
+#   * the moment someone fixes the underlying bug, the strict xfail turns into
+#     an XPASS failure, forcing the registry entry to be removed.
+#
+# Format:
+#   KF-XXXX:
+#     summary: one-line description
+#     module:  dotted path to the offending code
+#     detail:  what happens vs. what should happen
+
+KF-0001:
+  summary: "int2timedelta() never returns timedelta.max for the INT64 sentinel"
+  module: msldap.protocol.typeconversion.int2timedelta
+  detail: >
+    The special-case guard compares an int against the string
+    '-9223372036854775808', which is never equal, so the '(never)' sentinel
+    (-2^63) is turned into a huge bogus negative timedelta instead of
+    datetime.timedelta.max.
+
+KF-0002:
+  summary: "multi_sd() decode path raises TypeError"
+  module: msldap.protocol.typeconversion.multi_sd
+  detail: >
+    In the decode branch the code calls single_sd([r] for r in x), passing a
+    generator expression into single_sd(), which then does x[0] and raises
+    'generator object is not subscriptable'. Multi-valued security descriptor
+    attributes cannot be decoded.
+
+KF-0003:
+  summary: "KeyCredential.from_pfx / from_pfx_data cannot reconstruct an object"
+  module: msldap.commons.keycredential.KeyCredential.from_pfx_data
+  detail: >
+    from_pfx_data() constructs KeyCredential(cert, key, None, None). The
+    constructor immediately does pack('<Q', currentTime) with currentTime=None,
+    raising struct.error. Loading a KeyCredential from a PFX is impossible.
+
+KF-0004:
+  summary: "MSLDAPLdiff.parse_entry mishandles base64 (::) encoded values"
+  module: msldap.commons.ldif.MSLDAPLdiff.parse_entry
+  detail: >
+    LDIF spec uses 'attr:: <base64>' for base64 values. The base64 detection
+    uses line.split(':',1)[0].endswith('::') which is always False (the key part
+    never contains the colons). The value keeps a leading ':' and is never
+    base64-decoded.
+
+KF-0005:
+  summary: "MSLDAPLdiff.build_index raises UnboundLocalError on any file"
+  module: msldap.commons.ldif.MSLDAPLdiff.build_index
+  detail: >
+    'current_dn' (and start_pos) are referenced before assignment on the first
+    'dn: ' line, so build_index() -> parse() raise UnboundLocalError for every
+    input file. LDIF parsing is completely non-functional.
+
+KF-0006:
+  summary: "MSLDAPClientConnection.get_extra_info() error handler raises NameError"
+  module: msldap.connection.MSLDAPClientConnection.get_extra_info
+  detail: >
+    The except block calls traceback.print_exc() but 'traceback' is never
+    imported at module scope (only inside two other local blocks). So whenever
+    self.auth.get_extra_info() raises (e.g. for simple/plain/anonymous binds
+    that have no NTLM extra info), the handler itself raises
+    "NameError: name 'traceback' is not defined", masking the real error and
+    crashing test_connection(). Confirmed live: a 'simple' bind against the lab
+    surfaces the NameError instead of the actual bind result.
+
+KF-0007:
+  summary: "ADCS/enrollment enumeration uses the domain DN, not the forest Configuration NC"
+  module: msldap.client.MSLDAPClient.list_certificate_templates
+  detail: >
+    list_root_cas / list_ntcas / list_aiacas / list_enrollment_services /
+    list_certificate_templates build their search base as
+    'CN=...,CN=Configuration,%s' % self._ldapinfo.distinguishedName, i.e. from
+    the *defaultNamingContext* (the connected domain). The Configuration
+    partition is forest-wide and lives under rootDomainNamingContext
+    (configurationNamingContext on the RootDSE). On any non-root / child-domain
+    DC this yields 'CN=Configuration,DC=child,DC=root,...' which does not exist,
+    raising LDAPSearchException noSuchObject. Confirmed live against the GOAD
+    child domain north.sevenkingdoms.local (DC=north,DC=sevenkingdoms,DC=local):
+    ADCS enumeration should use configurationNamingContext instead.

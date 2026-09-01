@@ -137,16 +137,36 @@ class MSLDAPClient:
 				print('RootDSE is empty! You will need to find the tree manually!')
 			else:
 				self._serverinfo = res
-				self._tree = res['defaultNamingContext']
-				self._ldapinfo, err = await self.get_ad_info()
-				if self._con.is_anon is False:
+				# AD publishes 'defaultNamingContext' in the RootDSE. Non-AD servers
+				# (OpenLDAP, 389DS, etc.) do not; they only expose 'namingContexts'.
+				# Fall back to an explicitly provided base DN (from the URL/target),
+				# then to the first advertised naming context.
+				self._tree = res.get('defaultNamingContext')
+				if self._tree is None:
+					if self.target is not None and self.target.tree:
+						self._tree = self.target.tree
+					else:
+						naming_contexts = res.get('namingContexts')
+						if naming_contexts:
+							if isinstance(naming_contexts, (list, tuple)):
+								self._tree = naming_contexts[0]
+							else:
+								self._tree = naming_contexts
+				if self._tree is None:
+					print('Could not determine the base DN from the server! You will need to set the tree manually or provide it in the connection URL!')
+				else:
+					# get_ad_info() only returns a populated MSADInfo on Active Directory.
+					# On non-AD servers it returns (None, None) and we skip the AD-specific
+					# domain SID / domain name bootstrapping.
+					self._ldapinfo, err = await self.get_ad_info()
 					if err is not None:
 						raise err
-					self._domainsid_cache[self._ldapinfo.objectSid] = self._ldapinfo.name
-					self.domainsid = self._ldapinfo.objectSid
-					await self.get_domain_name()
-				if self.keepalive is True:
-					self.__keepalive_task = asyncio.create_task(self.__keepalive(res['defaultNamingContext']))
+					if self._ldapinfo is not None and self._con.is_anon is False:
+						self._domainsid_cache[self._ldapinfo.objectSid] = self._ldapinfo.name
+						self.domainsid = self._ldapinfo.objectSid
+						await self.get_domain_name()
+					if self.keepalive is True:
+						self.__keepalive_task = asyncio.create_task(self.__keepalive(self._tree))
 			return True, None
 		except Exception as e:
 			return False, e
@@ -563,7 +583,12 @@ class MSLDAPClient:
 			self._ldapinfo = MSADInfo.from_ldap(entry)
 			return self._ldapinfo, None
 
-		logger.debug('Poll finished!')
+		# Non-AD servers don't expose the AD domain object (the distinguishedName
+		# filter above matches nothing), so there is no MSADInfo to build. Return a
+		# proper tuple instead of falling through to an implicit None (which would
+		# blow up the caller's tuple-unpacking).
+		logger.debug('No AD domain info found (non-AD server?)')
+		return None, None
 
 	async def get_all_spn_entries(self):
 		"""

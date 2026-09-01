@@ -822,7 +822,13 @@ class MSLDAPClientConnection:
 					query, 
 					attributes, 
 					search_scope = search_scope, 
-					size_limit=size_limit, 
+					# The paged-results control already governs how many entries the
+					# server returns per page. AD ignores a redundant request-level
+					# sizeLimit, but RFC-compliant servers (OpenLDAP, 389DS, ...)
+					# enforce it as a hard cap and abort the whole search with
+					# 'sizeLimitExceeded' once the directory has more entries than a
+					# single page. Send 0 (unbounded) so the control alone drives paging.
+					size_limit=0, 
 					types_only=typesOnly, 
 					derefAliases=derefAliases, 
 					timeLimit=timeLimit, 
@@ -836,15 +842,17 @@ class MSLDAPClientConnection:
 						if 'resultCode' in res['protocolOp']:
 							if res['protocolOp']['resultCode'] != 'success':
 								raise LDAPSearchException(res['protocolOp']['resultCode'], res['protocolOp']['diagnosticMessage'])
-							for control in res['controls']:
+							# Reset the cookie for this round; if the server sends back the
+							# paged-results control we pick up the next cookie, otherwise
+							# there are no further pages and we stop.
+							cookie = b''
+							for control in (res['controls'] or []):
 								if control['controlType'] == b'1.2.840.113556.1.4.319':
 									try:
 										cookie = SearchControlValue.load(control['controlValue']).native['cookie']
 									except Exception as e:
 										raise e
 									break
-							else:
-								raise Exception('SearchControl missing from server response!')
 						else:
 							yield (convert_result(res['protocolOp']), None)
 
